@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>정규직 전환 모의면접</title>
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="모의면접"><meta name="theme-color" content="#2f5bea">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1d2330;--mu:#6b7280;--ac:#2f5bea;--bd:#e3e6ec;--red:#dc2626}
+@media(prefers-color-scheme:dark){:root{--bg:#12151c;--card:#1b2029;--tx:#e8eaf0;--mu:#9aa3b2;--ac:#6d8cff;--bd:#2b3240;--red:#f87171}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Malgun Gothic","Noto Sans KR",sans-serif;line-height:1.55}
+.w{max-width:560px;margin:0 auto;padding:14px}.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:12px}
+h1{font-size:19px;margin:2px 0 10px}h2{font-size:15px;margin:16px 0 6px}label{display:block;font-size:13px;color:var(--mu);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit}
+button{background:var(--ac);color:#fff;border:0;border-radius:12px;padding:14px 16px;font:inherit;font-weight:700;cursor:pointer;width:100%}
+button.s{background:var(--bg);color:var(--tx);border:1px solid var(--bd)}button.r{background:var(--red)}button:disabled{opacity:.5}
+.row{display:flex;gap:8px;margin-top:10px}.row>*{flex:1}.hide{display:none}.small{font-size:12px;color:var(--mu)}
+.face{width:130px;height:130px;border-radius:50%;object-fit:cover;object-position:center 20%;display:block;margin:0 auto 6px;border:3px solid var(--bd);background:var(--bg)}
+.face.talk{border-color:var(--ac);animation:p 1s infinite}@keyframes p{50%{box-shadow:0 0 0 8px rgba(47,91,234,.18)}}
+.nm{text-align:center;font-weight:700}.sub{text-align:center;color:var(--mu);font-size:13px}
+.qb{background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:14px;margin:12px 0;font-size:17px;font-weight:600}
+.timer{font-size:54px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums;margin:8px 0}.timer.warn{color:var(--red)}
+.tb{background:var(--bg);border:1px dashed var(--bd);border-radius:10px;padding:10px;margin-top:8px;white-space:pre-wrap;font-size:14px}
+.bar{height:10px;background:var(--bg);border:1px solid var(--bd);border-radius:6px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--ac)}
+.sc{display:grid;grid-template-columns:90px 1fr 30px;gap:8px;align-items:center;margin:6px 0;font-size:14px}
+ul{margin:4px 0;padding-left:20px}.q{border-top:1px solid var(--bd);padding-top:8px;margin-top:8px}
+</style></head><body><div class="w">
+
+<script>let API_KEY="";let audioEl=null;</script>
+
+<div id="setup" class="card"><h1>🎤 한국건강관리협회 정규직 전환 모의면접</h1>
+<img id="p0" class="face hide" alt="면접관">
+<div class="nm">총장 강위중</div><input id="nm" type="hidden" value="총장 강위중">
+<div class="row"><button class="s" onclick="$('f').click()">면접관 사진 선택 (처음 한 번)</button></div>
+<input id="f" type="file" accept="image/*" class="hide">
+<label>OpenAI API 키 (이 폰에만 저장됩니다)</label>
+<input id="key" type="password" autocomplete="off" placeholder="sk-...">
+<div class="small" id="ks"></div>
+<div class="row"><button class="s" id="clr">저장된 키·사진 지우기</button></div>
+<label>지원 직무/부서</label><input id="job" placeholder="예: 전산, 검진, 행정">
+<label>질문 개수 (자기소개·한 단어 포함)</label>
+<select id="cnt"><option>4</option><option selected>5</option><option>7</option><option>10</option></select>
+<label>답변 시간(초)</label><select id="sec"><option value="30">30초</option><option value="60" selected>60초</option><option value="90">90초</option></select>
+<div class="row"><button id="go">면접 시작</button></div></div>
+
+<div id="room" class="card hide">
+<img id="p1" class="face" alt=""><div class="nm" id="n1"></div><div class="sub" id="st"></div>
+<div class="qb" id="q"></div>
+<div class="timer hide" id="tm">01:00</div>
+<div id="ctl">
+ <button id="again" class="s hide" style="margin-bottom:8px">🔁 질문 다시 듣기</button>
+ <button id="ans">🎙 대답하기</button>
+</div>
+<button id="stop" class="r hide">⏹ 답변 완료</button>
+<div class="sub hide" id="msg"></div>
+<div class="tb hide" id="tx"></div>
+<div class="row"><button id="redo" class="s hide">다시 답하기</button><button id="next" class="hide">다음 질문 ▶</button></div>
+</div>
+
+<div id="fbk" class="card hide"><h1>면접 평가 결과</h1><div id="fbt">분석 중...</div><div class="row"><button onclick="location.reload()">다시 하기</button></div></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const CHAT_MODEL="gpt-4o", STT_MODEL="whisper-1";
+const TTS_MODEL="gpt-4o-mini-tts", TTS_VOICE="onyx";   // 남자 목소리: onyx(묵직) / ash / echo
+const AUDIO_MODELS=["gpt-audio","gpt-4o-audio-preview"]; // 음성 직접 평가용(앞에서부터 시도)
+const FIXED=["간단하게 자기소개를 부탁드립니다.","자신을 한 단어로 표현하면 무엇이고, 왜 그 단어를 선택하셨나요?"];
+const POOL=[
+"한국건강관리협회가 어떤 일을 하는 기관이라고 알고 계신가요?",
+"정규직으로 전환되면 협회에서 어떤 역할을 하고 싶으신가요?",
+"지금까지 근무하면서 가장 보람 있었던 경험을 말씀해 주세요.",
+"업무 중 실수를 했던 경험과 그 이후에 어떻게 대처했는지 말씀해 주세요.",
+"검진 고객이 불만을 제기할 때 어떻게 응대하시겠습니까?",
+"동료와 의견이 충돌했을 때 어떻게 해결하시겠습니까?",
+"개인정보와 검진 결과 같은 민감한 정보를 다룰 때 가장 중요하게 생각하는 점은 무엇인가요?",
+"공공성과 수익성이 충돌할 때 어떤 기준으로 판단해야 한다고 생각하시나요?",
+"상사의 지시가 규정에 어긋난다고 느껴질 때 어떻게 하시겠습니까?",
+"바쁜 시기에 업무가 몰릴 때 우선순위를 어떻게 정하시나요?",
+"본인의 강점과 보완해야 할 약점을 하나씩 말씀해 주세요.",
+"협회의 서비스나 업무 중 개선하고 싶은 점이 있다면 무엇인가요?",
+"봉사정신과 책임감 중 하나만 고른다면 무엇이고, 그 이유는 무엇인가요?",
+"새로운 업무나 시스템을 빠르게 배워야 했던 경험이 있나요?",
+"고령자나 거동이 불편한 고객을 응대할 때 신경 쓸 점은 무엇인가요?",
+"팀워크를 위해 본인이 실천하고 있는 것이 있다면 말씀해 주세요.",
+"정규직 전환 후 3년 뒤 본인의 모습을 어떻게 그리고 계신가요?",
+"업무 중 가장 힘들었던 순간과 극복 방법을 말씀해 주세요.",
+"최근 건강 관련 이슈 중 협회가 관심을 가져야 한다고 생각하는 것은 무엇인가요?",
+"다른 부서와 협업이 필요한 상황에서 어떻게 소통하시겠습니까?",
+"규정과 절차가 번거롭게 느껴질 때에도 지켜야 하는 이유는 무엇이라고 생각하시나요?",
+"마지막으로 하고 싶은 말이나 협회에 꼭 전하고 싶은 포부가 있으신가요?"];
+let Q=[],qi=0,ans=[],stream=null,mr=null,chunks=[],tmr=null,left=60,limit=60,used=0,t0=0,rec=false;
+const ls={g(k){try{return localStorage.getItem(k)}catch(e){return null}},s(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+(()=>{const p=ls.g('kahp_photo');if(p){$('p0').src=p;$('p0').classList.remove('hide')}if(ls.g('kahp_key'))$('ks').textContent='✔ 키가 저장되어 있습니다 (바꾸려면 새로 입력)'})();
+$('f').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const im=new Image();im.onload=()=>{const s=Math.min(1,400/Math.max(im.width,im.height));const c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);const u=c.toDataURL('image/jpeg',.85);$('p0').src=u;$('p0').classList.remove('hide');ls.s('kahp_photo',u)};im.src=r.result};r.readAsDataURL(f)};
+$('clr').onclick=()=>{if(!confirm('저장된 키와 사진을 지울까요?'))return;try{localStorage.removeItem('kahp_key');localStorage.removeItem('kahp_photo')}catch(e){}location.reload()};
+const SIL="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=";
+function unlockAudio(){try{if(!audioEl)audioEl=new Audio();audioEl.src=SIL;audioEl.play().catch(()=>{})}catch(e){}}
+const keyOK=()=>API_KEY&&!API_KEY.includes("붙여넣기");
+function getKey(){return API_KEY}
+async function chat(system,user,max=2500,json=true){
+ const body={model:CHAT_MODEL,max_tokens:max,messages:[{role:"system",content:system},{role:"user",content:user}]};if(json)body.response_format={type:"json_object"};
+ const r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+getKey()},body:JSON.stringify(body)});
+ const j=await r.json();if(!r.ok)throw new Error(j.error&&j.error.message||"HTTP "+r.status);return j.choices[0].message.content}
+async function stt(blob,ext){
+ const fd=new FormData();fd.append("file",blob,"a."+ext);fd.append("model",STT_MODEL);fd.append("language","ko");
+ const r=await fetch("https://api.openai.com/v1/audio/transcriptions",{method:"POST",headers:{"Authorization":"Bearer "+getKey()},body:fd});
+ const j=await r.json();if(!r.ok)throw new Error(j.error&&j.error.message||"HTTP "+r.status);return j.text}
+
+function stopSay(){try{speechSynthesis.cancel()}catch(e){}if(audioEl){try{audioEl.pause()}catch(e){}}$('p1').classList.remove('talk')}
+async function say(t){
+ stopSay();
+ try{
+  const r=await fetch("https://api.openai.com/v1/audio/speech",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+getKey()},
+   body:JSON.stringify({model:TTS_MODEL,voice:TTS_VOICE,input:t,instructions:"차분하고 중후한 중년 남성 총장님 톤으로, 또박또박 천천히 말하세요.",response_format:"mp3"})});
+  if(!r.ok)throw new Error("tts");
+  const a=audioEl||(audioEl=new Audio());a.src=URL.createObjectURL(await r.blob());
+  a.onplay=()=>$('p1').classList.add('talk');a.onended=()=>$('p1').classList.remove('talk');
+  await a.play();
+ }catch(e){try{const u=new SpeechSynthesisUtterance(t);u.lang='ko-KR';u.pitch=.6;u.rate=.92;u.onstart=()=>$('p1').classList.add('talk');u.onend=u.onerror=()=>$('p1').classList.remove('talk');speechSynthesis.speak(u)}catch(e2){}}
+}
+const fmt=s=>String(Math.floor(s/60)).padStart(2,'0')+":"+String(s%60).padStart(2,'0');
+function show(id,v){$(id).classList.toggle('hide',!v)}
+
+$('go').onclick=()=>{
+ const kin=$('key').value.trim();if(kin){API_KEY=kin;ls.s('kahp_key',kin)}else API_KEY=ls.g('kahp_key')||"";
+ if(!keyOK()){alert('OpenAI API 키를 입력해 주세요.');return}
+ unlockAudio();
+ const total=+$('cnt').value;limit=+$('sec').value;
+ const rnd=[...POOL].sort(()=>Math.random()-.5).slice(0,Math.max(0,total-2));
+ Q=[...FIXED,...rnd];            // 1·2번은 항상 고정, 나머지는 랜덤
+ const nm=$('nm').value||'면접관';
+ if($('p0').getAttribute('src'))$('p1').src=$('p0').src;else $('p1').classList.add('hide');
+ $('n1').textContent=nm;show('setup',false);show('room',true);qi=0;ans=[];ask()};
+
+function ask(){
+ show('tm',false);show('stop',false);show('tx',false);show('msg',false);show('redo',false);show('next',false);show('ctl',true);show('again',true);$('ans').disabled=false;
+ $('st').textContent=`질문 ${qi+1} / ${Q.length}`;
+ const intro=qi===0?`안녕하세요, ${$('nm').value}입니다. 정규직 전환 면접을 시작하겠습니다. `:"";
+ $('q').textContent=Q[qi];say(intro+Q[qi])}
+$('again').onclick=()=>say(Q[qi]);
+
+$('ans').onclick=async()=>{
+ stopSay();
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.MediaRecorder){alert('이 주소(' + location.protocol + ')에서는 마이크 녹음을 쓸 수 없습니다.\n폰에 저장된 파일을 직접 여는 방식(file:// 또는 content://)은 크롬이 마이크를 막습니다. https 주소나 localhost(http://localhost:포트)로 열어야 합니다.');return}
+ try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){alert('마이크 오류: '+e.name+(e.name==='NotAllowedError'?'\n크롬 주소창 왼쪽 아이콘 → 권한 → 마이크 허용, 또는 휴대폰 설정 → 앱 → Chrome → 권한 → 마이크 허용을 확인하세요.':e.name==='NotFoundError'?'\n마이크를 찾지 못했습니다.':e.name==='NotReadableError'?'\n다른 앱이 마이크를 쓰는 중일 수 있습니다.':'\n'+e.message));return}
+ const mt=["audio/webm;codecs=opus","audio/webm","audio/mp4"].find(t=>window.MediaRecorder&&MediaRecorder.isTypeSupported(t))||"";
+ mr=new MediaRecorder(stream,mt?{mimeType:mt}:{});chunks=[];
+ mr.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+ mr.onstop=()=>finish(mr.mimeType||mt||"audio/webm");
+ mr.start();rec=true;t0=Date.now();left=limit;
+ show('ctl',false);show('stop',true);show('tm',true);$('tm').textContent=fmt(left);$('tm').classList.remove('warn');
+ tmr=setInterval(()=>{left--;$('tm').textContent=fmt(Math.max(left,0));if(left<=10)$('tm').classList.add('warn');if(left<=0)stopRec()},1000)};
+function stopRec(){if(!rec)return;rec=false;clearInterval(tmr);used=Math.round((Date.now()-t0)/1000);try{mr.stop()}catch(e){}stream&&stream.getTracks().forEach(t=>t.stop())}
+$('stop').onclick=stopRec;
+
+
+// ===== 음성 분석 =====
+function calc(pcm,sr){
+ const hop=Math.round(sr*0.05),n=Math.floor(pcm.length/hop),rms=[];
+ for(let i=0;i<n;i++){let s=0;for(let j=0;j<hop;j++){const v=pcm[i*hop+j];s+=v*v}rms.push(Math.sqrt(s/hop))}
+ const so=[...rms].sort((a,b)=>a-b),floor=so[Math.floor(n*0.1)]||0,peak=so[Math.floor(n*0.95)]||0;
+ const th=Math.max(floor*2.5,peak*0.15,0.004),sp=rms.map(v=>v>th);
+ let first=sp.indexOf(true),last=sp.lastIndexOf(true);
+ if(first<0)return {dur:n*0.05,speak:0,db:-99,dbstd:0,pauses:0,longest:0,lead:n*0.05};
+ let pauses=0,longest=0,pf=0,run=0;
+ for(let i=first;i<=last+1;i++){if(i<=last&&!sp[i])run++;else{if(run>=16){pauses++;pf+=run;longest=Math.max(longest,run*0.05)}run=0}}
+ const speak=Math.max(0.5,(last-first+1-pf)*0.05);
+ const dbs=[];for(let i=first;i<=last;i++)if(sp[i])dbs.push(20*Math.log10(rms[i]));
+ const mean=dbs.reduce((a,b)=>a+b,0)/dbs.length,std=Math.sqrt(dbs.reduce((a,b)=>a+(b-mean)**2,0)/dbs.length);
+ return {dur:n*0.05,speak,db:mean,dbstd:std,pauses,longest,lead:first*0.05}}
+function toWav(pcm,sr,to){
+ const ratio=sr/to,n=Math.floor(pcm.length/ratio),out=new Int16Array(n);
+ for(let i=0;i<n;i++){const a=Math.floor(i*ratio),b=Math.max(a+1,Math.floor((i+1)*ratio));let s=0,c=0;for(let k=a;k<b&&k<pcm.length;k++){s+=pcm[k];c++}s=c?s/c:0;out[i]=Math.max(-1,Math.min(1,s))*32767}
+ const hd=new ArrayBuffer(44),v=new DataView(hd),w=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+ w(0,'RIFF');v.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,to,true);v.setUint32(28,to*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,n*2,true);
+ const bytes=new Uint8Array(44+n*2);bytes.set(new Uint8Array(hd),0);bytes.set(new Uint8Array(out.buffer),44);
+ let bin='';for(let i=0;i<bytes.length;i+=0x8000)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));return btoa(bin)}
+async function analyzeBlob(blob){
+ try{const ac=new (window.AudioContext||window.webkitAudioContext)();
+  const buf=await ac.decodeAudioData(await blob.arrayBuffer());try{ac.close()}catch(e){}
+  const pcm=buf.getChannelData(0),sr=buf.sampleRate;
+  return {metrics:calc(pcm,sr),wav:toWav(pcm,sr,Q.length>6?11025:16000)}}catch(e){return null}}
+function addRate(m,a){const ch=a.replace(/\s/g,'').length;m.rate=a==="(답변 없음)"?0:Math.round(ch/(m.speak/60));return m}
+const rateLbl=r=>!r?'-':r<220?'느린 편':r<=380?'적정':'빠른 편';
+const volLbl=d=>d<-40?'작은 편':d<=-16?'적정':'큰 편';
+const varLbl=s=>s<3?'단조로움':s<=8?'자연스러움':'기복 큼';
+function mLine(m){return m?`속도 ${m.rate}자/분(${rateLbl(m.rate)}) · 음량 ${m.db.toFixed(0)}dB(${volLbl(m.db)}) · 음량변화 ${varLbl(m.dbstd)} · 0.8초 이상 쉼 ${m.pauses}회(최장 ${m.longest.toFixed(1)}초) · 첫 발화까지 ${m.lead.toFixed(1)}초`:'측정 불가'}
+async function voiceEval(){
+ const items=ans.filter(x=>x&&x.wav);if(!items.length)return null;
+ const content=[{type:"text",text:`아래는 한국건강관리협회 정규직 전환 면접에서 지원자가 질문별로 답한 실제 녹음이다. 내용이 아니라 '말하기'만 평가하라: 발음 명확성, 억양·전달력, 자신감(떨림·머뭇거림·말끝 흐림), 목소리 안정감. 녹음기 음질 탓과 지원자 탓을 구분하고, 확실하지 않은 것은 단정하지 마라. 한국어로 JSON만 출력(코드블록 금지):
+{"scores":{"발음·명확성":0,"억양·전달력":0,"자신감":0,"목소리 안정감":0},"comment":"전체 말하기 총평 3문장","per_question":[{"n":1,"tip":"그 답변의 말하기 특징과 개선점 1~2문장"}]}
+점수는 1~5 정수.`}];
+ items.forEach(x=>{const i=ans.indexOf(x)+1;content.push({type:"text",text:`[질문${i}] ${x.q}`});content.push({type:"input_audio",input_audio:{data:x.wav,format:"wav"}})});
+ for(const model of AUDIO_MODELS){
+  try{const r=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+getKey()},
+   body:JSON.stringify({model,modalities:["text"],max_tokens:1500,messages:[{role:"system",content:"너는 면접 음성 코치다."},{role:"user",content}]})});
+   const j=await r.json();if(!r.ok)throw new Error(j.error&&j.error.message||"HTTP "+r.status);
+   const t=j.choices[0].message.content;return JSON.parse(t.slice(t.indexOf('{'),t.lastIndexOf('}')+1))
+  }catch(e){window._vErr=e.message}}
+ return null}
+function voiceHtml(vj,esc){
+ let h=`<h2>🎙 말하기 분석</h2>`;
+ h+=ans.map((x,i)=>`<div class="q"><b>Q${i+1}</b> <span class="small">${x.sec}초 사용</span><br><span class="small">${esc(mLine(x.an))}</span></div>`).join('');
+ if(vj){for(const[k,v]of Object.entries(vj.scores||{}))h+=`<div class="sc"><span>${esc(k)}</span><div class="bar"><i style="width:${v*20}%"></i></div><b>${esc(v)}</b></div>`;
+  h+=`<p>${esc(vj.comment)}</p>`+(vj.per_question||[]).map(x=>`<div class="q">Q${esc(x.n)} 🎧 ${esc(x.tip)}</div>`).join('')}
+ else h+=`<p class="small">AI 음성 직접 평가는 이번에 실패했습니다(${esc(window._vErr||'녹음 분석 불가')}). 위 수치만 참고하세요. 수치는 폰 마이크·주변 소음에 따라 달라질 수 있습니다.</p>`;
+ return h}
+
+async function finish(mime){
+ show('stop',false);show('tm',false);show('msg',true);$('msg').textContent='음성을 글로 바꾸는 중...';
+ const ext=mime.includes("mp4")?"m4a":"webm";
+ try{const blob=new Blob(chunks,{type:mime});const [t,an]=await Promise.all([stt(blob,ext),analyzeBlob(blob)]);const a=(t||"").trim()||"(답변 없음)";ans[qi]={q:Q[qi],a,sec:used,an:an&&an.metrics?addRate(an.metrics,a):null,wav:an&&an.wav};
+  show('msg',false);$('tx').textContent="내 답변 인식 결과:\n"+ans[qi].a+(ans[qi].an?"\n\n"+mLine(ans[qi].an):"");show('tx',true);show('redo',true);show('next',true);
+  $('next').textContent=qi+1<Q.length?'다음 질문 ▶':'면접 종료 · 평가 받기';
+ }catch(e){$('msg').textContent='변환 실패: '+e.message;show('redo',true)}}
+$('redo').onclick=ask;
+$('next').onclick=()=>{qi++;if(qi<Q.length)ask();else evaluate()};
+
+async function evaluate(){
+ show('room',false);show('fbk',true);$('fbt').textContent='AI가 내용과 목소리를 평가하는 중... (20~40초)';
+ const tr=ans.map((x,i)=>`[질문${i+1}] ${x.q}\n[답변, ${x.sec}초/${limit}초 사용] ${x.a}\n[말하기 수치(참고)] ${mLine(x.an)}`).join("\n\n");
+ const sys=`너는 한국건강관리협회(국민 건강검진·건강증진 공공성 기관)의 정규직 전환 면접관이다. 지원 직무: ${$('job').value||'미정'}. 음성을 텍스트로 옮긴 답변이므로 인식 오류·말버릇은 감안한다. 엄격하되 건설적으로 평가한다. 답변이 짧거나 모호하면 낮게 준다. 점수는 1~5 정수. 한국어로, 반드시 JSON만 출력한다.`;
+ const usr=`아래 면접 내용을 평가하라.
+JSON 형식:
+{"pass_level":"합격권|보완 필요|미흡","scores":{"논리성":0,"구체성":0,"직무적합":0,"조직적합·태도":0,"표현력":0,"종합":0},
+"strengths":["..."],"improvements":["..."],
+"per_question":[{"q":"질문","a":"답변 요약","score":0,"tip":"더 나은 답변 방향과 예시 문장"}],
+"summary":"정규직 전환 관점의 총평 3문장"}
+특히 '자기소개'(구성·핵심 전달)와 '한 단어 표현'(단어의 적절성·이유의 설득력)은 꼼꼼히 평가하라.
+
+${tr}`;
+ try{
+  const [raw,vj]=await Promise.all([chat(sys,usr),voiceEval()]);const j=JSON.parse(raw);
+  const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  let h=`<p><b>판정: ${esc(j.pass_level)}</b></p>`;
+  for(const[k,v]of Object.entries(j.scores||{}))h+=`<div class="sc"><span>${esc(k)}</span><div class="bar"><i style="width:${v*20}%"></i></div><b>${esc(v)}</b></div>`;
+  h+=`<h2>잘한 점</h2><ul>${(j.strengths||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+  h+=`<h2>아쉬운 점</h2><ul>${(j.improvements||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+  h+=`<h2>질문별 코칭</h2>`+(j.per_question||[]).map(x=>`<div class="q"><b>Q. ${esc(x.q)}</b> <span class="small">(${esc(x.score)}/5)</span><br><span class="small">내 답변: ${esc(x.a)}</span><br>💡 ${esc(x.tip)}</div>`).join('');
+  h+=voiceHtml(vj,esc);
+  h+=`<h2>총평</h2><p>${esc(j.summary)}</p>`;
+  $('fbt').innerHTML=h;
+ }catch(e){$('fbt').textContent='평가 생성 실패: '+e.message}}
+</script></body></html>
